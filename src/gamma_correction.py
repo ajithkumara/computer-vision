@@ -1,79 +1,64 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
-# --- Load the brain proton density image ---
-img_path = "../images/brain_proton_density_slice.png"  # correct filename
-img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+# Settings
+IMG_PATH = "../images/highlights_and_shadows.jpg"
+OUT_DIR = "../outputs"
+os.makedirs(OUT_DIR, exist_ok=True)
 
+# Load color image
+img = cv2.imread(IMG_PATH)
 if img is None:
-    raise FileNotFoundError(f"❌ Could not load image: {img_path}")
+    raise FileNotFoundError(f"Could not load image: {IMG_PATH}")
 
-print(f"✅ Brain image loaded, shape = {img.shape}")
+# Convert BGR to RGB
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-# --- Function to create LUTs for selective enhancement ---
-def create_lut(accent="white"):
-    lut = np.zeros(256, dtype=np.uint8)
+# Convert to L*a*b*
+lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
+L, a, b = lab[:,:,0], lab[:,:,1], lab[:,:,2]
 
-    for i in range(256):
-        if accent == "white":
-            # White matter = high intensity → enhance brighter values
-            if i < 100:
-                lut[i] = int(i * 0.4)  # suppress very dark
-            elif i < 180:
-                lut[i] = int(80 + (i - 100) * 2)  # expand mid-high
-            else:
-                lut[i] = 255  # saturate very bright
-        elif accent == "gray":
-            # Gray matter = mid intensity → enhance mid-range
-            if i < 60:
-                lut[i] = int(i * 0.4)  # suppress dark background
-            elif i < 150:
-                lut[i] = int((i - 60) * 2)  # stretch mid-tones
-            else:
-                lut[i] = 200  # cap very high intensities
-    return lut
+# Apply gamma correction to L channel
+gamma = 0.6  # Adjust this value (0.4–0.8) for best visual result
+L_corrected = np.power(L / 255.0, gamma) * 255.0
+L_corrected = np.clip(L_corrected, 0, 255).astype(np.uint8)
 
-# --- Create LUTs ---
-lut_white = create_lut("white")
-lut_gray = create_lut("gray")
+# Reconstruct image
+lab_corrected = cv2.merge([L_corrected, a, b])
+img_corrected = cv2.cvtColor(lab_corrected, cv2.COLOR_LAB2RGB)
 
-# --- Apply transformations ---
-img_white = cv2.LUT(img, lut_white)
-img_gray = cv2.LUT(img, lut_gray)
+# Save and display comparison
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+ax1.imshow(img)
+ax1.set_title("Original")
+ax1.axis("off")
 
-# --- Plot transformation curves ---
-plt.figure(figsize=(10,5))
-plt.plot(lut_white, label="White matter enhancement", color="blue")
-plt.plot(lut_gray, label="Gray matter enhancement", color="red")
-plt.title("Intensity Transformation Functions")
-plt.xlabel("Input Pixel Value")
-plt.ylabel("Output Pixel Value")
-plt.legend()
-plt.grid(alpha=0.4)
-plt.savefig("../outputs/task2_curves.png", dpi=100, bbox_inches="tight")
-plt.show()
-
-# --- Show original vs enhanced images ---
-fig, axes = plt.subplots(1, 3, figsize=(15,6))
-axes[0].imshow(img, cmap="gray")
-axes[0].set_title("Original")
-axes[0].axis("off")
-
-axes[1].imshow(img_white, cmap="gray")
-axes[1].set_title("White Matter Accentuated")
-axes[1].axis("off")
-
-axes[2].imshow(img_gray, cmap="gray")
-axes[2].set_title("Gray Matter Accentuated")
-axes[2].axis("off")
+ax2.imshow(img_corrected)
+ax2.set_title(f"Gamma Corrected (γ = {gamma})")
+ax2.axis("off")
 
 plt.tight_layout()
-plt.savefig("../outputs/task2_comparison.png", dpi=100, bbox_inches="tight")
+plt.savefig(os.path.join(OUT_DIR, "q3_comparison.png"), dpi=120)
 plt.show()
 
-# --- Save results ---
-cv2.imwrite("../outputs/task2_white.png", img_white)
-cv2.imwrite("../outputs/task2_gray.png", img_gray)
+# Histograms
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+plt.hist(L.ravel(), bins=256, range=(0,255), color='gray', alpha=0.7)
+plt.title("Original L* Channel Histogram")
+plt.xlabel("Intensity")
+plt.ylabel("Frequency")
 
-print("🎯 Task 2 completed! Results saved in ../outputs/")
+plt.subplot(1, 2, 2)
+plt.hist(L_corrected.ravel(), bins=256, range=(0,255), color='red', alpha=0.7)
+plt.title("Corrected L* Channel Histogram")
+plt.xlabel("Intensity")
+plt.ylabel("Frequency")
+
+plt.tight_layout()
+plt.savefig(os.path.join(OUT_DIR, "q3_histograms.png"), dpi=120)
+plt.show()
+
+print(f"Gamma value used: γ = {gamma}")
