@@ -1,1 +1,1 @@
-"# Computer Vision Assignment" 
+"Computer Vision Assignment" 
